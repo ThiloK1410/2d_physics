@@ -89,24 +89,13 @@ class Ball:
         for x in range(self.number_of_refreshes):
             movement_fraction = self.get_mov_fraction(self.number_of_refreshes)
 
-            # continuous collision for screen borders
-            # if self is out of bounds in next check
-            if self.is_out_of_bounds(self._position + movement_fraction):
-                x = self.get_intersect()
-                self._position += movement_fraction
-                self.bounce_on_axis(self.is_out_of_bounds(self._position + movement_fraction, give_axis=True))
-                self._position += self.new_movement * (1-x)
-                self.new_movement_x = 1
-                self._movement = self.new_movement
 
-            # when self will collide next frame:
-            elif self.new_movement_x < 1:
-                self._position += movement_fraction * self.new_movement_x + self.new_movement * (1 - self.new_movement_x)
-                self._movement = self.new_movement
-                self.new_movement_x = 1
-            else:
-                self._position += movement_fraction
+            # if self is out of bounds
+            if self.is_out_of_bounds(self._position):
+                self.bounce_on_axis(self.is_out_of_bounds(self._position, give_axis=True))
+                movement_fraction = self.get_mov_fraction(self.number_of_refreshes)
 
+            self._position += movement_fraction
             #self.active_move()
             self._movement += self._acceleration * 1/self.number_of_refreshes
         self._acceleration = np.array([0, 0]).astype("float64")
@@ -184,18 +173,13 @@ class Ball:
             return True
 
     # using default value as global variable
-    def bounce_on_axis(self, axis, cache=[False]*2):
+    def bounce_on_axis(self, axis):
         if axis == 0:
-            self.new_movement[0] *= -1
-            cache[0] = True
+            self._movement[0] *= -1
         elif axis == 1:
-            self.new_movement[1] *= -1
-            cache[1] = True
+            self._movement[1] *= -1
         elif axis == 2:
             self.new_movement *= -1
-            cache[0], cache[1] = True, True
-        else:
-            cache[0], cache[1] = False, False
 
     def bounce_on_ball(self, ball):
         normal = self.get_pos() - ball.get_pos()
