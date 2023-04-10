@@ -27,7 +27,7 @@ class App:
         self.spatial_hashing = Spatial_Hashing(self._display_surf, Ball.balls, Ball.max_radius)
 
         # create scenario
-        Ball(self._display_surf, 800, 400, 0)
+        Ball(self._display_surf, 800, 400, 10)
         #Ball(self._display_surf, 400, 400, 10, color=(0, 0, 255), weight=20)
 
         self.on_execute()
@@ -62,7 +62,7 @@ class App:
             self._running = False
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
-                Ball(self._display_surf, dx=2)
+                Ball(self._display_surf, dx=10)
             if event.key == pygame.K_i:
                 self.spatial_hashing.show_all()
             if event.key == pygame.K_o:

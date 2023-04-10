@@ -1,6 +1,6 @@
 import numpy as np
 import pygame
-from neural_network import NeuralNetwork
+#from neural_network import NeuralNetwork
 
 
 class Ball:
@@ -17,13 +17,13 @@ class Ball:
         self._color = color
         self._position = np.array([x, y]).astype("float64")
         self._movement = np.array([dx, dy]).astype("float64")
+        self.number_of_refreshes = 1
 
         self._acceleration = np.array([0, 0]).astype("float64")
         random_vector = np.random.rand(2)
         self._direction = random_vector / np.linalg.norm(random_vector)
 
         self.perception = [self._position[0], self._position[1], self._movement[0], self._movement[1]]
-        self.brain = NeuralNetwork([len(self.perception), 3, 3, 2])
 
         # predefined values
 
@@ -44,6 +44,12 @@ class Ball:
 
     def get_mov(self):
         return self._movement
+
+    def get_mov_fraction(self, fraction_factor):
+        return self._movement/fraction_factor
+
+    def get_mov_abs(self):
+        return np.linalg.norm(self._movement)
 
     def set_mov(self, movement):
         self._movement = movement
@@ -78,26 +84,31 @@ class Ball:
         pygame.draw.circle(self._surface, self._color, self._position, self._radius)
 
     def on_update(self):
+        self.number_of_refreshes = 1 + int(self.get_mov_abs()) * 1
 
-        # continuous collision for screen borders
-        if self.is_out_of_bounds(self._position + self._movement):
-            x = self.get_intersect()
-            self._position += self._movement * x
-            self.bounce_on_axis(self.is_out_of_bounds(self._position + self._movement, give_axis=True))
-            self._position += self.new_movement * (1-x)
-            self.new_movement_x = 1
-            self._movement = self.new_movement
+        for x in range(self.number_of_refreshes):
+            movement_fraction = self.get_mov_fraction(self.number_of_refreshes)
+
+            # continuous collision for screen borders
+            # if self is out of bounds in next check
+            if self.is_out_of_bounds(self._position + movement_fraction):
+                x = self.get_intersect()
+                self._position += movement_fraction
+                self.bounce_on_axis(self.is_out_of_bounds(self._position + movement_fraction, give_axis=True))
+                self._position += self.new_movement * (1-x)
+                self.new_movement_x = 1
+                self._movement = self.new_movement
 
             # when self will collide next frame:
-        elif self.new_movement_x < 1:
-            self._position += self._movement * self.new_movement_x + self.new_movement * (1 - self.new_movement_x)
-            self._movement = self.new_movement
-            self.new_movement_x = 1
-        else:
-            self._position += self._movement
+            elif self.new_movement_x < 1:
+                self._position += movement_fraction * self.new_movement_x + self.new_movement * (1 - self.new_movement_x)
+                self._movement = self.new_movement
+                self.new_movement_x = 1
+            else:
+                self._position += movement_fraction
 
-        self.active_move()
-        self._movement += self._acceleration
+            #self.active_move()
+            self._movement += self._acceleration * 1/self.number_of_refreshes
         self._acceleration = np.array([0, 0]).astype("float64")
 
     # returns an 0<=x<=1 which shows where between frames collisions happen,
@@ -106,14 +117,14 @@ class Ball:
         temp = 1
         # checking for box collisions
         if ball is None:
-            if not self.is_out_of_bounds(self._position + self._movement):
+            if not self.is_out_of_bounds(self._position + self.get_mov_fraction(self.number_of_refreshes)):
                 return 1
 
             def rec_intersect(x, rec_counter=0):
                 depth = rec_counter + 1
                 if rec_counter > 10:
                     return x
-                elif self.is_out_of_bounds(self._position + self._movement * x):
+                elif self.is_out_of_bounds(self._position + self.get_mov_fraction(self.number_of_refreshes) * x):
                     x -= 1 / (2**depth)
                     return rec_intersect(x, depth)
                 else:
@@ -140,33 +151,51 @@ class Ball:
             return rec_collision(temp)
 
     def is_out_of_bounds(self, position, give_axis=False):
-        out1 = False
-        out2 = None
+        out = None
         r = self._radius
-        if position[0]+r > self._surface.get_width() or position[0]-r < 0:
-            out1 = True
-            out2 = 0
-        if position[1]+r > self._surface.get_height() or position[1]-r < 0:
-            out1 = True
-            out2 = 1
+
+        # the return values are: out_of_x = 0, out_of_y = 1, both = 2
         if give_axis:
-            return out2
+            if position[0] + r > self._surface.get_width() or position[0] - r < 0:
+                out = 0
+            if position[1] + r > self._surface.get_height() or position[1] - r < 0:
+                out = 1
+            if position[1] + r > self._surface.get_height() or position[1] - r < 0 and\
+                    position[0] + r > self._surface.get_width() or position[0] - r < 0:
+                out = 2
+
+        # true if out of bounds
         else:
-            return out1
+            out = False
+            if position[0] + r > self._surface.get_width() or position[0] - r < 0:
+                out = True
+            if position[1] + r > self._surface.get_height() or position[1] - r < 0:
+                out = True
+
+        return out
 
     def will_collide(self, ball, x=1):
-        future_distance = self.get_pos() + self.get_mov()*x - (ball.get_pos() + ball.get_mov()*x)
+        future_distance = self.get_pos() + self.get_mov_fraction(self.number_of_refreshes)*x - \
+                          (ball.get_pos() + ball.get_mov_fraction(self.number_of_refreshes)*x)
         future_abs_distance = np.linalg.norm(future_distance)
         collision_distance = self.get_rad() + ball.get_rad()
 
         if future_abs_distance <= collision_distance:
             return True
 
-    def bounce_on_axis(self, axis):
-        if axis == 0 or axis == 2:
+    # using default value as global variable
+    def bounce_on_axis(self, axis, cache=[False]*2):
+        if axis == 0:
             self.new_movement[0] *= -1
-        if axis == 1 or axis == 2:
+            cache[0] = True
+        elif axis == 1:
             self.new_movement[1] *= -1
+            cache[1] = True
+        elif axis == 2:
+            self.new_movement *= -1
+            cache[0], cache[1] = True, True
+        else:
+            cache[0], cache[1] = False, False
 
     def bounce_on_ball(self, ball):
         normal = self.get_pos() - ball.get_pos()
